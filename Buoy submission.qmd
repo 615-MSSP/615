@@ -1,0 +1,156 @@
+---
+title: "Buoy"
+format: pdf
+editor: visual
+warning: FALSE
+---
+
+```{r, warning = FALSE, message=FALSE}
+library(data.table)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(zoo)
+library(tibble)
+library(readr)
+```
+
+Getting Buoy Data
+
+```{r, warning=FALSE, message=FALSE}
+file_root <- "https://www.ndbc.noaa.gov/view_text_file.php?filename=44013h"
+tail <- ".txt.gz&dir=data/historical/stdmet/"
+
+load_buoy_data1 <- function(year) {
+  path <- paste0(file_root, year, tail)
+  
+  
+  if (year < 2007) {
+  header <- scan(path, what = 'character', nlines = 1)
+  buoy <- read.table(path, fill = TRUE, header = TRUE, sep = "")
+  buoy <- add_column(buoy, mm = NA, .after = "hh")
+  buoy <- add_column(buoy, TIDE = NA, .after = "VIS")
+    
+  } else {
+  header <- scan(path, what = 'character', nlines = 1)  
+  buoy <- fread(path, header = FALSE, skip = 1, fill = TRUE)
+
+    setnames(buoy, header)
+  }
+  
+  #return(buoy)
+}
+
+all_data1 <- lapply(1985:2024, load_buoy_data1)
+
+combined_data1 <- rbindlist(all_data1, fill = TRUE)
+```
+
+```{r}
+load_buoy_data <- function(year) {
+  path <- paste0(file_root, year, tail)
+
+  header <- scan(path, what = 'character', nlines = 1)
+  num_columns <- length(header)  
+
+  if (num_columns == 16) {
+    buoy <- read.table(path, fill = TRUE, header = TRUE, sep = "")
+    buoy <- add_column(buoy, mm = NA, .after = "hh")
+    buoy <- add_column(buoy, TIDE = NA, .after = "VIS")
+
+  } else if (num_columns == 17) {
+    buoy <- read.table(path, fill = TRUE, header = TRUE, sep = "")
+    buoy <- add_column(buoy, TIDE = NA, .after = "VIS")
+
+  } else {
+    buoy <- fread(path, header = FALSE, skip = 1, fill = TRUE)
+    setnames(buoy, header)
+  }
+
+  return(buoy)
+}
+all_data <- lapply(1985:2024, load_buoy_data)
+combined_data <- rbindlist(all_data, fill = TRUE)
+```
+
+```{r}
+combined_data1 <- combined_data1 %>%
+  mutate(
+    YY = as.character(YY),
+    `#YY` = as.character(`#YY`),
+    YYYY = as.character(YYYY)
+  )
+
+# Combine year columns safely using coalesce
+combined_data1 <- combined_data1 %>%
+  mutate(YYYY = coalesce(YYYY, `#YY`, YY))
+combined_data1 <- combined_data1 %>%
+  mutate(BAR = coalesce(as.numeric(BAR), as.numeric(PRES)),  # Convert BAR and PRES to numeric
+    WD = coalesce(as.numeric(WD), as.numeric(WDIR)))
+
+combined_data1 <- combined_data1 %>%
+  select(-TIDE, -TIDE.1, -mm,- WDIR, -PRES,-`#YY`,-YY)
+
+combined_data1$datetime <- ymd_h(paste(combined_data1$YYYY, combined_data1$MM, combined_data1$DD, combined_data1$hh, sep = "-"))
+
+combined_data1 <- combined_data1 %>%
+  mutate(across(everything(), 
+                ~ na_if(as.numeric(as.character(.)), 99) %>%
+                na_if(999) %>%
+                na_if(9999)))
+
+#summary(combined_data)
+#str(combined_data)
+#str(combined_data$datetime)
+if (!inherits(combined_data1$datetime, "POSIXct")) {
+  combined_data1$datetime <- ymd_h(paste(combined_data1$YYYY, combined_data1$MM, combined_data1$DD, combined_data1$hh, sep = "-"))
+}
+```
+
+```{r}
+names(combined_data1)
+```
+
+```{r}
+combined_data1 <- combined_data1 %>%
+  mutate(Year = year(datetime))
+
+combined_data1 <- combined_data1 %>% select(-YYYY)
+```
+
+```{r}
+head(combined_data1)
+```
+
+## Question: Is wind speed increasing or decreasing over time? Can we rely on the trend we see?
+
+```{r}
+yearly_avg_wind_speed <- combined_data1 %>%
+  group_by(Year) %>%
+  summarise(
+    avg_wind_speed = mean(WSPD, na.rm = TRUE)
+  )
+
+ggplot(yearly_avg_wind_speed, aes(x = Year, y = avg_wind_speed)) +
+  geom_line(aes(color = "Wind Speed"), size = 1) +  
+  geom_smooth(method = "lm", se = FALSE, color = "red", linetype = "dashed") +
+  labs(
+    title = "Wind Speed Trends Over Time",
+    x = "Year", 
+    y = "Wind Speed (m/s)", 
+    color = "Legend"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Fit linear regression
+model <- lm(avg_wind_speed ~ Year, data = yearly_avg_wind_speed)
+
+# View results
+summary(model)
+```
+
+## Conclusion
+
+From our model summary we can conclude that there is a slight downward trend in wind speed over the years. Our coefficient shows that wind speed decreases by 0.008 m/s per year. However, this trend is not significant at the 0.05 level as the p value is 0.136. Additionally our R\^2 is 0.057 this means only about 5.7% of the variation in average wind speed is explained by year. This is a very weak relationship meaning that year alone is not a strong predictor.
