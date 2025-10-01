@@ -1,0 +1,97 @@
+---
+title: "Class 11 - Sep 26"
+format: 
+   html:
+      embed-resources: true
+editor: visual
+---
+
+## Assignments due on Monday
+
+1.  please submit github URL for the buoy reading assignment
+
+2.  Exercises from R4DS\
+    a - 3.2.5: 1,4,5\
+    b - 3.3.5: 1,4\
+    c - 3.5.7: 1,2,4,6
+
+## Cheat Sheets
+
+[dplyr](https://dplyr.tidyverse.org/)
+
+[tidyr](https://tidyr.tidyverse.org/)
+
+[stringr](https://stringr.tidyverse.org/)
+
+### using a cheatsheet
+
+Examples from dplyr
+
+## R4DS Chapter 3
+
+```{r}
+#| label: R4DS_ch_3-1
+#| warning: true
+#| message: true
+
+library(nycflights13)
+library(tidyverse)
+
+flights_here <- flights
+
+```
+
+### Rows - Manipulate Cases
+
+filter() arrange() distinct()
+
+```{r}
+#| label: rows
+#| warning: false
+#| message: false
+
+flights |> filter(dep_delay > 120)
+
+delay_120 <- flights_here |> filter(dep_delay > 120)
+
+library(magrittr) 
+
+flights_here %<>% filter(dep_delay > 120)
+
+delay_order <- flights_here |> arrange(dep_delay)
+
+
+```
+
+### Columns -- Manipulate Variables
+
+select() mutate()
+
+```{r}
+#| label: columns
+
+ flights |> select(year, month, day)
+ 
+ m1 <- flights |> 
+     mutate(
+      gain = dep_delay - arr_delay,
+      speed = distance / air_time * 60
+      )
+
+```
+
+### Summarize and groups
+
+```{r}
+#| label: groups
+
+flights |> 
+   group_by(month)
+
+flights |> 
+   group_by(month) |>
+   summarise(
+    avg_delay = mean(dep_delay, na.rm = TRUE)
+   )
+
+```
